@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const db = require('./models/db');
-const redis = require('./models/redis');
+const { getRedis } = require('./models/redis');
 const logger = require('./models/logger');
 const { handleDeliveryWebhook } = require('./controllers/webhookController');
 const verifySignature = require('./middleware/verifySignature');
@@ -16,7 +16,8 @@ app.get('/health', async (req, res) => {
     // Check DB
     await db.execute('SELECT 1');
     // Check Redis
-    await redis.ping();
+    const redisClient = await getRedis();
+    await redisClient.ping();
     res.json({ status: 'healthy', db: 'connected', redis: 'connected' });
   } catch (error) {
     res.status(500).json({ status: 'unhealthy', error: error.message });

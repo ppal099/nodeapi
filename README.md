@@ -10,6 +10,12 @@ A Node.js service for handling delivery status webhooks with idempotency, rate l
 4. Copy `.env.example` to `.env` and fill in values.
 5. Start the server: `npm start`
 
+## Observability
+
+- JSON structured logs are emitted for every webhook request.
+- Each webhook log includes `delivery_id`, `status`, `courier_id`, `processing_time_ms`, and `outcome`.
+- The service exposes `GET /health` to verify service status, DB connectivity, and Redis connectivity.
+
 ## Triggering the Webhook Locally
 
 Use curl:
