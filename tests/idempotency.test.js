@@ -25,13 +25,25 @@ describe('Idempotency Test', () => {
       json: jest.fn()
     };
 
-    // Mock DB to return existing with same status
-    db.execute.mockResolvedValueOnce([[{ status: 'delivered' }]]);
+    const mockConnection = {
+      execute: jest.fn(),
+      beginTransaction: jest.fn(),
+      commit: jest.fn(),
+      rollback: jest.fn(),
+      release: jest.fn()
+    };
+
+    // Mock getConnection
+    db.getConnection.mockResolvedValue(mockConnection);
+
+    // Mock execute to return existing with same status
+    mockConnection.execute.mockResolvedValueOnce([[{ status: 'delivered' }]]);
 
     await handleDeliveryWebhook(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(db.execute).toHaveBeenCalledTimes(1); // Only the select
-    // No update or publish
+    expect(mockConnection.execute).toHaveBeenCalledTimes(1); // Only the select
+    expect(mockConnection.commit).toHaveBeenCalled();
+    // No update
   });
 });

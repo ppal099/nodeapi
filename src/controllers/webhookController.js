@@ -2,6 +2,7 @@ const db = require('../models/db');
 const { getRedis } = require('../models/redis');
 const logger = require('../models/logger');
 const notificationQueue = require('../queues/notificationQueue');
+const Delivery = require('../models/delivery');
 const fetch = global.fetch;
 
 async function handleDeliveryWebhook(req, res) {
@@ -36,43 +37,35 @@ async function handleDeliveryWebhook(req, res) {
   res.status(200).json({ received: true });
 
   try {
-    const [existing] = await db.execute(
-      'SELECT status FROM deliveries WHERE delivery_id = ?',
-      [delivery_id]
-    );
-
-    if (existing.length > 0 && existing[0].status === status) {
-      logger.info('Duplicate status update', { delivery_id, status, courier_id, processing_time_ms: Date.now() - startTime, outcome: 'duplicate' });
-      return;
+    const connection = await db.getConnection();
+    await connection.beginTransaction();
+    let updated = false;
+    try {
+      updated = await Delivery.checkAndUpdateStatus(connection, delivery_id, status, timestamp, req.body.client_id);
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
 
-    if (existing.length > 0) {
-      await db.execute(
-        'UPDATE deliveries SET status = ?, updated_at = ? WHERE delivery_id = ?',
-        [status, timestamp, delivery_id]
-      );
-    } else {
-      const { client_id } = req.body;
-      await db.execute(
-        'INSERT INTO deliveries (delivery_id, status, client_id, updated_at) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE status = VALUES(status), updated_at = VALUES(updated_at)',
-        [delivery_id, status, client_id, timestamp]
-      );
+    if (!updated) {
+      logger.info('Duplicate status update', { delivery_id, status, courier_id, processing_time_ms: Date.now() - startTime, outcome: 'duplicate' });
+      return;
     }
 
     const redis = await getRedis();
     const message = JSON.stringify({ delivery_id, status, timestamp });
     await redis.publish('delivery_updates', message);
 
-    const [clientRows] = await db.execute(
-      'SELECT c.id AS client_id, c.webhook_url FROM clients c JOIN deliveries d ON c.id = d.client_id WHERE d.delivery_id = ?',
-      [delivery_id]
-    );
-    if (clientRows.length > 0) {
+    const clientInfo = await Delivery.findClientWebhook(delivery_id);
+    if (clientInfo) {
       notificationQueue.add({
         delivery_id,
         status,
-        client_id: clientRows[0].client_id,
-        webhook_url: clientRows[0].webhook_url
+        client_id: clientInfo.client_id,
+        webhook_url: clientInfo.webhook_url
       });
     }
 

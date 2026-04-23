@@ -52,6 +52,7 @@ class NotificationQueue {
           'INSERT INTO failed_notifications (delivery_id, client_id, failure_reason) VALUES (?, ?, ?)',
           [delivery_id, client_id, error.message]
         );
+        logger.error('Client notification permanently failed', { delivery_id, status, client_id, failure_reason: error.message });
       }
     }
   }

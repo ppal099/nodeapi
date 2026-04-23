@@ -8,7 +8,8 @@ function verifySignature(req, res, next) {
   const bodyString = JSON.stringify(req.body);
   const expectedSignature = crypto.createHmac('sha256', secret).update(bodyString).digest('hex');
 
-  if (courier_signature !== expectedSignature) {
+  // Use timing-safe comparison to prevent timing attacks
+  if (!crypto.timingSafeEqual(Buffer.from(courier_signature, 'hex'), Buffer.from(expectedSignature, 'hex'))) {
     return res.status(401).json({ error: 'Invalid signature' });
   }
 
